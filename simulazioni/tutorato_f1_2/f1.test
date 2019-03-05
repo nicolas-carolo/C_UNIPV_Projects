@@ -1,0 +1,82 @@
+[.TEST]
+Una gara
+
+[.ARGS]
+campionato1.txt
+
+[NUMERO_GARE]
+1
+
+[PILOTA_VINCITORE]
+Valtteri_Bottas 25
+
+[SQUADRA_VINCITRICE]
+Toro_Rosso 33
+
+############################################################
+
+[.TEST]
+Due gare
+
+[.ARGS]
+campionato2.txt
+
+[NUMERO_GARE]
+2
+
+[PILOTA_VINCITORE]
+Roberto_Merhi 40
+
+[SQUADRA_VINCITRICE]
+Marussia 80
+
+############################################################
+
+[.TEST]
+Dieci gare
+
+[.ARGS]
+campionato10.txt
+
+[NUMERO_GARE]
+10
+
+[PILOTA_VINCITORE]
+Roberto_Merhi 203
+
+[SQUADRA_VINCITRICE]
+Marussia 226
+
+############################################################
+
+[.TEST]
+Venti gare
+
+[.ARGS]
+campionato20.txt
+
+[NUMERO_GARE]
+20
+
+[PILOTA_VINCITORE]
+Pastor_Maldonado 359
+
+[SQUADRA_VINCITRICE]
+Toro_Rosso 527
+
+############################################################
+
+[.TEST]
+Tutti a pari punti
+
+[.ARGS]
+campionatoU.txt
+
+[NUMERO_GARE]
+20
+
+[PILOTA_VINCITORE]
+Carlos_Sainz 101
+
+[SQUADRA_VINCITRICE]
+Ferrari 202

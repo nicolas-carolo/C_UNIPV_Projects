@@ -1,0 +1,811 @@
+#!/usr/bin/env python3
+
+# TODO:
+# - sommario
+# - output json (?)
+# - localizzazione ITA/ENG (?)
+# - verbosita`
+# - qualche commento in piu` (sezione output)
+# - supporto per valgrind
+
+__doc__ = """Run tests to check the correctness of a program.
+
+Options:
+  -v, --verbosity=L        set the verbosity level, where the level must be
+                           an integer between 0 (minimum) and 4 (maximum).
+                           The default value is 3.
+  -t, --timeout=T          set how many seconds it should be waited for the
+                           termination of the program.  The default is 10
+                           seconds.
+  -m, --max-errors=N       reports up to N errors per section (default 4).
+  -c, --config=FILE        uses the specified configuration file.
+  -C, --color=YES|NO|AUTO  enable or disable colored output (default AUTO).
+  -V, --valgrind           use Valgrind (if installed) to check memory usage.
+  -h, --help               print this message and exit.
+"""
+
+USAGE_en = ("Usage: pvcheck [OPTIONS]... TEST_FILE EXECUTABLE " +
+            "[EXECUTABLE_PARAMS]...")
+HELP_en = __doc__
+
+
+USAGE_it = ("Utilizzo: pvcheck [OPZIONI...] " +
+            "FILE_OUTPUT_ATTESO FILE_ESEGUIBILE " +
+            "[PARAMETRI_ESEGUIBILE]...")
+HELP_it = """Esegue dei test per verificare la correttezza di un programma.
+
+Opzioni:
+  -v, --verbosity=L        imposto il livello di verbosity.  Il livello
+                           deve essere un valore intero tra 0 (minimo) e 3
+                           (massimo).  Il default e` 2.
+  -t, --timeout=T          imposta per quanti secondi bisogna attendere
+                           la terminazione del programma.  Il default e`
+                           pari a 10 secondi.
+  -m, --max-errors=N       riporta fino ad un massimo di N errori per
+                           sezione (default 4).
+  -c, --config=FILE        utilizza il file di configurazione specificato.
+  -C, --color=YES|NO|AUTO  abilita o disabilita l'output colorato (default
+                           AUTO).
+  -V, --valgrind           utilizza Valgrind (se installato) per controllare
+                           l'utilizzo della memoria.
+  -h, --help               stampa questo messaggio ed esce.
+"""
+
+import subprocess
+import signal
+import os
+import sys
+import getopt
+import re
+import logging
+import tempfile
+from itertools import count, zip_longest
+from collections import OrderedDict, Counter, defaultdict
+from functools import wraps
+
+
+
+############################################################
+# INTERNATIONALIZATION
+############################################################
+
+# Internationalization is very basic.  It is self-contained so that
+# external files are not needed.  In the future it would be easily
+# replaced by gettext since translatable strings are marked in the
+# same way as _("text").
+
+_strings = {}
+_missing_translation = set()
+_lang = 'en'
+_translations = {
+    'it': {
+        USAGE_en: USAGE_it,
+        HELP_en: HELP_it,
+        "ERROR": "ERRORE",
+        "OK": "OK",
+        "WARNING!": "ATTENZIONE!",
+        "COMMAND LINE": "RIGA DI COMANDO",
+        "INPUT": "INPUT",
+        "OUTPUT": "OUTPUT",
+        "TEMPORARY FILE": "FILE TEMPORANEO",
+        "TEST": "TEST",
+        " line %d": " riga %d",
+        " (expected '%s'": " (atteso '%s'",
+        ", got '%s')": ", ottenuto '%s')",
+        "unexpected line '%s'": "riga inattesa '%s'",
+        "missing line (expected '%s')": "riga mancante (atteso '%s')",
+        "wrong number of lines (expected %d, got %d)": "numero di righe errato (atteso %d, ottenuto %d)",
+        "line %d is wrong  (expected '%s', got '%s')": "riga %d errata  (atteso '%s', ottenuto '%s')",
+        "The first %d lines matched correctly": "Le prime %d righe sono corrette",
+        "(... plus other %d errors ...)": "(... piu` altri %d errori ...)",
+        'ACTUAL OUTPUT': 'OUTPUT EFFETTIVO',
+        'EXPECTED OUTPUT': 'OUTPUT ATTESO',
+        'detailed comparison': 'confronto dettagliato',
+        "<nothing>": "<niente>",
+        "missing section": "sezione mancante",
+        "empty section": "sezione vuota",
+        "extra section": "sezione extra",
+        "Invalid parameter ('%s')": "Parametro non valido ('%s')",
+        "TIMEOUT EXPIRED: PROCESS TERMINATED":"TEMPO LIMITE SCADUTO: PROCESSO TERMINATO",
+        "PROCESS ENDED WITH A FAILURE": "PROCESSO TERMINATO CON UN FALLIMENTO",
+        "(SEGMENTATION FAULT)": "(SEGMENTATION FAULT)",
+        "(ERROR CODE %d)": "(CODICE D'ERRORE %d)",
+        "FAILED TO RUN THE FILE '%s' ": "IMPOSSIBILE ESEGUIRE IL FILE '%s' ",
+        "(the file does not exist)": "(file inesistente)",
+        "SUMMARY": "RIEPILOGO",
+        "successes": "successi",
+        "warnings": "avvertimenti",
+        "errors": "errori",
+        "<program>": "<programma>",
+	"<valgrind>": "<valgrind>"
+    }
+}
+def _(text):
+    try:
+        return _strings[text]
+    except KeyError:
+        _missing_translation.add(text)
+        s = (text if len (text) < 15 else text[:15] + "...")
+        print("[TT] Warning: missing translation for '%s'" % s)
+        return text
+
+def _install_lang():
+    global _lang
+    global _strings
+    _lang = os.environ.get('LANG', 'en').partition('_')[0]
+    try:
+        _strings = _translations[_lang]
+    except KeyError:
+        # Fallback to english, where the translation is the identity
+        # function.
+        _lang = 'en'
+        for t in _translations.values():
+            _strings = dict((k, k) for k in t)
+            break
+
+_install_lang()
+import atexit
+@atexit.register
+def _save_missing_translations():
+    if _missing_translation:
+        import pprint
+        with open('missing_translations.txt', 'wt') as f:
+            d = dict.fromkeys(_missing_translation, "")
+            pprint.pprint({_lang:d}, stream=f)
+
+
+############################################################
+# FORMATTED OUTPUT
+############################################################
+
+# Install a new logging level named "SUCCESS"
+SUCCESS = logging.INFO-1
+logging.addLevelName(SUCCESS, "SUCCESS")
+def success(self, message, *args, **kws):
+    # Yes, logger takes its '*args' as 'args'.
+    if self.isEnabledFor(SUCCESS):
+        self._log(SUCCESS, message, args, **kws)
+logging.Logger.success = success
+log = logging.getLogger()
+
+# Enable colored output for the logger
+class ColorLog(logging.Formatter):
+    """Format log messages.
+
+    Allow colored output and optionally print a section name in front
+    of the message.
+
+    """
+
+    BLUE = '\033[94m'
+    DARK_BLUE = '\033[34m'
+    YELLOW = '\033[93m'
+    DARK_YELLOW = '\033[33m'
+    GREEN = '\033[92m'
+    DARK_GREEN = '\033[92m'
+    RED = '\033[91m'
+    DARK_RED = '\033[91m'
+    GRAY = '\033[97m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+
+    COLORS = {
+        logging.FATAL: BOLD+DARK_RED,
+        logging.ERROR: BOLD+RED,
+        logging.WARNING: BOLD+DARK_YELLOW,
+        logging.INFO: "",
+        SUCCESS: BOLD+DARK_GREEN,
+        logging.DEBUG: BLUE,
+        logging.NOTSET: ""
+    }
+
+    def __init__(self, color):
+        if color:
+            self._format = self.colored_format
+        else:
+            self._format = self.simple_format
+
+    def format(self, record):
+        return self._format(record)
+
+    def simple_format(self, record):
+        if hasattr(record, "section"):
+            return ("%s: %s" % (record.section, record.msg))
+        else:
+            return record.msg
+
+    def colored_format(self, record):
+        msg = record.msg
+        idx = min(x for x in self.COLORS if x >= record.levelno)
+        if hasattr(record, "section"):
+            return ("%s%s: %s%s" % (self.COLORS[idx], record.section,
+                                    msg, self.ENDC))
+        else:
+            return ("%s%s%s" % (self.COLORS[idx], msg, self.ENDC))
+
+
+def setup_logging(level, color):
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setFormatter(ColorLog(color))
+    log.addHandler(ch)
+    log.setLevel(level)
+
+
+class ResultType:
+    """Possible results for individual and combined tests."""
+    SUCCESS = 0
+    WARNING = 1
+    ERROR = 2
+    FATAL = 3
+
+    TYPES = list(range(FATAL+1))
+
+    _TXT = [_(s) for s in "OK WARNING! ERROR ERROR".split()]
+
+    @staticmethod
+    def tostr(i):
+        """String representation of an error type."""
+        return ResultType._TXT[i]
+
+
+
+
+############################################################
+# PARSING
+############################################################
+
+RE_INT = re.compile(r'(-|\+)?[0-9]+')
+RE_REAL = re.compile(r'(-|\+)?[0-9]+\.(?P<frac>[0-9]*)')
+RE_NUMBER = re.compile(r'(-|\+)?[0-9]+(\.[0-9]*)')
+
+
+def parse_results(f):
+    """Parse the lines in f and return the content divided in sections.
+
+    file -> [ (secname, [lines]) ]
+    """
+    ret = []
+    section = None
+    for line in f:
+        l = line.strip()
+        if not l or l[0] == '#':
+            continue  # Skip empty lines and comments
+        if "[" in l and l.endswith("]"):
+            # A new section
+            st = l.rfind("[")
+            section = l[(st+1):-1].strip().upper()
+            ret.append((section, []))
+        elif section is not None:
+            ret[-1][1].append(line)
+    return ret
+
+
+def group_sections_by_name(sections, name):
+    """Return the content fo all sections with the given name.
+
+    [ (secname, [ lines]) ] -> [ lines ]
+    """
+    ret = []
+    for (secname, lines) in sections:
+        if secname == name:
+            ret.extend(lines)
+    return ret
+
+
+def interpret_section_flags(lines):
+    """Interpret the sequence lines as flags related to sections.
+
+    [ lines ] -> { secname: [flags] }
+    """
+    flags = {}
+    for line in lines:
+        toks = line.split()
+        if toks:
+            flags.setdefault(toks[0], []).extend(toks[1:])
+    return flags
+
+
+def split_tests(t):
+    """Split the sections in t into a sequence of multiple named tests.
+
+    Everything preceding the first test is replicated for each test.
+
+    [ (secname, [ line ]) ] -> [ (testname, [ (secname, [ line ]) ]) ]
+    """
+    def grouper(t):
+        testname = None
+        test = []
+        n = 0
+        for (secname, lines) in t:
+            if secname == '.TEST':
+                yield (testname, test)
+                n += 1
+                testname = (lines[0].strip() if lines
+                        else ("Test-%d" % n))
+                test = []
+            else:
+                test.append((secname, lines))
+        yield (testname, test)
+
+    it = iter(grouper(t))
+    pre = next(it)
+    ret = [(r[0], pre[1] + r[1]) for r in it]
+    if not ret:
+        ret = [pre]
+    return ret
+
+
+############################################################
+# MATCHING
+############################################################
+
+def check_element(r, t):
+    """Compare single elements."""
+    m = RE_REAL.fullmatch(t)
+    if m is not None:
+        # If the target is a fractional number, compare the result up
+        # to the given number of digits.
+        digits = len(m.group('frac'))
+        try:
+            return float(t) == round(float(r), digits)
+        except ValueError:
+            return False
+    elif RE_INT.fullmatch(t):
+        # If the target is an integer, compare by value so that 15,
+        # +15 and 015 are considered as equivalent.
+        try:
+            return int(t) == int(r)
+        except ValueError:
+            return False
+    else:
+        # In the general case just compare the strings.
+        return (r == t)
+
+
+def check_line(res, target):
+    """Compare the result line with the expected target."""
+    res_elements = res.split()
+    target_elements = target.split()
+    return (len(res_elements) == len(target_elements)
+            and all(map(check_element, res_elements, target_elements)))
+
+
+def check_lines(res, target):
+    """Compare the content of a section with the expected target.
+
+    [str],[str] -> [ (int, str, str) ]
+    """
+    diffs = []
+    for (i, line, target_line) in zip(count(), res, target):
+        if not check_line(line, target_line):
+            diffs.append((i, line.strip(), target_line.strip()))
+    return diffs
+
+
+def check_unordered(key, result, target, maxerrors=None):
+    """Compare the two sets of lines disregarding their order.
+
+    Print messages to show matches and mismatches.
+    """
+
+    fmt = "%-30s| %-30s"
+    log.debug(_("detailed comparison"), extra={'section':key})
+    log.debug(fmt % (_("EXPECTED OUTPUT"), _("ACTUAL OUTPUT")))
+
+    def dbg(t, r):
+        t = t.rstrip() if t is not None else _("<nothing>")
+        r = r.rstrip() if r is not None else _("<nothing>")
+        if len(t) > 30:
+            t = t[:26] + "..."
+        if len(r) > 30:
+            r = r[:26] + "..."
+        fmt = "%-30s| %-30s"
+        log.debug(fmt % (t, r))
+
+    if maxerrors is None:
+        maxerrors = len(result) + len(target)
+    errors = []
+    if len(result) != len(target):
+        fmt = _("wrong number of lines (expected %d, got %d)")
+        errors.append(fmt % (len(target), len(result)))
+
+    result = set(result)
+    for i, t in enumerate(target):
+        found = None
+        for r in result:
+            if check_line(r, t):
+                found = r
+                dbg(t, r)
+                result.remove(found)
+                break
+        else:
+            fmt = _("missing line (expected '%s')")
+            errors.append(fmt % t.strip())
+            dbg(t, None)
+    for r in result:
+        fmt = _("unexpected line '%s'")
+        errors.append(fmt % r.strip())
+        dbg(None, r)
+
+    for e in errors[:maxerrors]:
+        log.error(e, extra={'section':key})
+    if len(errors) > maxerrors:
+        log.error(_("(... plus other %d errors ...)") %
+                  (len(errors) - maxerrors),
+                  extra={'section':key})
+    return (ResultType.ERROR if errors else ResultType.SUCCESS)
+
+
+def check_ordered(key, result, target, maxerrors=None):
+    """Line by line comparison of result and target.
+
+    Print messages to show matches and mismatches.
+    """
+    if maxerrors is None:
+        maxerrors = len(result) + len(target)
+    rescode = ResultType.SUCCESS
+
+    fmt = "%-30s| %-30s"
+    log.debug(_("detailed comparison"), extra={'section':key})
+    log.debug(fmt % (_("EXPECTED OUTPUT"), _("ACTUAL OUTPUT")))
+    for t, r in zip_longest(target, result):
+        st = (t.rstrip() if t is not None else _("<nothing>"))
+        sr = (r.rstrip() if r is not None else _("<nothing>"))
+        if len(st) > 30:
+            st = st[:26] + "..."
+        if len(sr) > 30:
+            sr = sr[:26] + "..."
+        log.debug(fmt % (st, sr))
+
+    if len(result) != len(target):
+        fmt = _("wrong number of lines (expected %d, got %d)")
+        log.error(fmt % (len(target), len(result)),
+                  extra={'section':key})
+        rescode = ResultType.ERROR
+    mm = check_lines(result, target)
+    if len(mm) > 0:
+        fmt = _("line %d is wrong  (expected '%s', got '%s')")
+        for (n, got, exp) in mm[:maxerrors]:
+            log.error(fmt % (n+1, exp, got), extra={'section':key})
+        if len(mm) > maxerrors:
+            log.error(_("(... plus other %d errors ...)") %
+                      (len(mm) - maxerrors),
+                      extra={'section':key})
+        return ResultType.ERROR
+    else:
+        if len(result) > 0 and len(result) != len(target):
+            log.warning(_("The first %d lines matched correctly") %
+                        min(len(result), len(target)),
+                        extra={'section':key})
+        return rescode
+
+
+def check_result(result, target, flags, maxerrors=None):
+    """Compare result against the target output.
+
+    Print messages to show matches and mismatches.  Return a summary
+    of the results obtained for each section.
+
+    """
+    summary = {}
+    res = {}
+    for (name, content) in result:
+        res.setdefault(name, []).extend(content)
+
+    for (key, t) in target:
+        if key.startswith('.'):
+            continue  # skip special sessions
+        try:
+            r = res[key]
+        except KeyError:
+            log.warning(_("missing section"), extra={'section':key})
+            summary[key] = ResultType.WARNING
+            continue
+        if not r and t:
+            log.error(_("empty section"), extra={'section':key})
+            summary[key] = ResultType.ERROR
+            continue
+        if "unordered" in flags.get(key, ()):
+            secresult = check_unordered(key, r, t, maxerrors)
+        else:
+            secresult = check_ordered(key, r, t, maxerrors)
+        summary[key] = secresult
+        if secresult == ResultType.SUCCESS:
+            log.success(_("OK"), extra={'section':key})
+
+    extra = set(x[0] for x in result) - set(x[0] for x in target)
+    for item in extra:
+        log.debug(_("extra section"), extra={'section':item[0]})
+    return summary
+
+
+############################################################
+# DRIVER
+############################################################
+
+def parse_options():
+    """Parse the command line."""
+
+    shortopts = "hc:t:v:m:C:V"
+    longopts = ["help", "config=", "verbosity=", "timeout=",
+                "max-errors=", "color=", "valgrind="]
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], shortopts, longopts)
+    except getopt.GetoptError as err:
+        print(str(err))
+        print(_(USAGE_en))
+        sys.exit(2)
+    opts = dict(opts)
+
+    if '-h' in opts or '--help' in opts:
+        print(_(USAGE_en))
+        print()
+        print(_(HELP_en))
+        sys.exit(0)
+
+    if len(args) < 2:
+        print(_(USAGE_en))
+        sys.exit(2)
+
+    def optval(key1, key2, default=None, result_type=None):
+        x = opts.get(key1, opts.get(key2, default))
+        if result_type is None:
+            return x
+        try:
+            return result_type(x)
+        except ValueError as err:
+            print(_("Invalid parameter ('%s')") % x)
+            sys.exit(2)
+
+    verbosity = optval('-v', '--verbosity', '3', int)
+    if verbosity < 0 or verbosity > 4:
+        print(_("Invalid parameter ('%d')") % verbosity)
+        sys.exit(2)
+
+    timeout = optval('-t', '--timeout', '10', float)
+    if timeout < 0:
+        print(_("Invalid parameter ('%f')") % timeout)
+        sys.exit(2)
+
+    maxerrors = optval('-m', '--max-errors', '4', int)
+    if maxerrors < 0:
+        print(_("Invalid parameter ('%d')") % maxerrors)
+        sys.exit(2)
+
+    config = optval('-c', '--config', '', str)
+
+    color = optval('-C', '--color', 'AUTO', str).upper()
+    if color not in ("YES", "NO", "AUTO"):
+        print(_("Invalid parameter ('%s')") % color)
+        sys.exit(2)
+    color = (color == "YES" or (color == "AUTO" and sys.stdout.isatty()))
+
+    valgrind = (True if '-V' in opts or '--valgrind' in opts else False)
+    opts = dict(config=config,
+                verbosity=verbosity,
+                timeout=timeout,
+                maxerrors=maxerrors,
+                color=color,
+                valgrind=valgrind)
+
+    return (args, opts)
+
+
+def parse_valgrind(report):
+    """Analyse the report by Valgrind and log the result."""
+    warnings = 0
+    errors = 0
+    for line in report:
+        if not line.startswith('=='):
+            continue
+        f = line.split()
+        if "in use at exit" in line:
+            bytes_ = int(f[5].replace(',', ''))
+            if bytes_ > 0:
+                log.warning("VALGRIND: memory %s" % " ".join(f[1:]))
+                warnings += 1
+            else:
+                log.debug("VALGRIND: memory %s" % " ".join(f[1:]))
+        elif "total heap usage" in line:
+            allocs = int(f[4].replace(',', ''))
+            frees = int(f[6].replace(',', ''))
+            if allocs != frees:
+                log.warning("VALGRIND: %s" % " ".join(f[1:]))
+                warnings += 1
+            else:
+                log.debug("VALGRIND: %s" % " ".join(f[1:]))
+
+        elif "ERROR SUMMARY" in line:
+            errs = int(f[3].replace(',', ''))
+            if errs > 0:
+                log.error("VALGRIND: %s" % " ".join(f[3:]))
+                errors += errs
+            else:
+                log.debug("VALGRIND: %s" % " ".join(f[3:]))
+    return (errors, warnings)
+
+
+
+def dotest(testname, target, args, opts):
+    """Execute the process and verify its output against target."""
+
+    try:
+        input_text = ("".join(group_sections_by_name(target, ".INPUT")))
+        input_bytes = input_text.encode('utf8')
+    except KeyError:
+        input_text = None
+
+    try:
+        file_text = ("".join(group_sections_by_name(target, ".FILE")))
+        tmpfile = tempfile.NamedTemporaryFile(suffix=".pvcheck.tmp",
+                                              delete=False)
+        tmpfile.write(file_text.encode('utf8'))
+        tmpfile.close()
+    except KeyError:
+        file_text = None
+        tmpfile = None
+
+    args = args[:]
+    extra = map(str.strip, group_sections_by_name(target, ".ARGS"))
+    args.extend(extra)
+    if tmpfile is not None:
+        args = [(a if a != ".FILE" else tmpfile.name) for a in args]
+
+    flags = interpret_section_flags(group_sections_by_name(target, ".SECTIONS"))
+ 
+    kwargs = dict(input=input_bytes,
+                  timeout=opts['timeout'])
+
+    if opts['valgrind']:
+        args.insert(1, "valgrind")
+        valgrind_out = tempfile.NamedTemporaryFile(suffix=".pvcheck.valgrind",
+                                                   delete=False)
+        kwargs['stderr'] = valgrind_out
+    else:
+        valgrind_out = None
+        
+    # Execute the process and parse its output
+    error_message = None
+    try:
+        output = subprocess.check_output(args[1:], **kwargs)
+    except subprocess.TimeoutExpired as e:
+        error_message = _("TIMEOUT EXPIRED: PROCESS TERMINATED")
+        output = e.output
+    except subprocess.CalledProcessError as e:
+        if e.returncode == -signal.SIGSEGV:
+            error_message = _("PROCESS ENDED WITH A FAILURE")
+            error_message += " " + _("(SEGMENTATION FAULT)")
+        else:
+            error_message = _("PROCESS ENDED WITH A FAILURE")
+            error_message += " " + _("(ERROR CODE %d)") % e.returncode
+        output = e.output
+    except FileNotFoundError:
+        output = bytes()
+        error_message = _("FAILED TO RUN THE FILE '%s' ") % sys.argv[2]
+        error_message += _("(the file does not exist)")
+
+    if tmpfile is not None:
+        os.remove(tmpfile.name)
+        
+    if valgrind_out is not None:
+        valgrind_out.close()
+        with open(valgrind_out.name, "rt") as f:
+            valgrind_report = [x for x in f]
+        os.remove(valgrind_out.name)
+    else:
+        valgrind_report = []
+
+    output = output.decode('utf-8', errors='replace').split('\n')
+    result = parse_results(output)
+
+    # Print a header for the test
+    if testname is not None:
+        if error_message is None:
+            log.info(_("TEST") + ": " + testname)
+        else:
+            fmt = "%s: %s (error: '%s')"
+            log.fatal(fmt % (_("TEST"), testname, error_message))
+    elif error_message is not None:
+        log.fatal(error_message)
+    log.info(_("COMMAND LINE") + ": " + " ".join(args[1:]))
+    if input_text != "":
+        lines = input_text.splitlines()
+        if len(lines) == 1:
+            log.info(_("INPUT") + ": " + lines[0])
+        else:
+            log.info(_("INPUT") + ":")
+            for line in lines:
+                log.info(line)
+    if file_text is not None:
+        lines = file_text.splitlines()
+        if len(lines) == 1:
+            log.debug(_("TEMPORARY FILE") + ": " + lines[0])
+        else:
+            log.debug(_("TEMPORARY FILE") + ":")
+            for line in lines:
+                log.info(line)
+
+    log.debug(_("OUTPUT") + ":")
+    for line in output:
+        log.debug("> " + line)
+
+    (verr, vwarn) = parse_valgrind(valgrind_report)
+
+    # Check the result
+    if error_message is None:
+        summary = check_result(result, target, flags,
+                               opts['maxerrors'])
+        summary[_("<program>")] = max(summary.values(),
+                                      default=ResultType.SUCCESS)
+    else:
+        summary = {_("<program>"): ResultType.FATAL }
+
+    if opts['valgrind']:
+        if verr > 0:
+            summary[_("<valgrind>")] = ResultType.ERROR
+        elif vwarn > 0:
+            summary[_("<valgrind>")] = ResultType.WARNING
+        else:
+            summary[_("<valgrind>")] = ResultType.SUCCESS
+
+    return summary
+
+
+def main():
+    (args, opts) = parse_options()
+    lvl = [logging.ERROR, logging.WARNING, logging.INFO,
+           SUCCESS, logging.DEBUG][opts['verbosity']]
+    setup_logging(lvl, opts['color'])
+
+    # Parse the configuration file (if given)
+    cfgfile = opts['config']
+    if not cfgfile:
+        cfg = []
+    else:
+        try:
+            with open(cfgfile, "rt") as f:
+                cfg = parse_results(f)
+        except FileNotFoundError as e:
+            print(e)
+            sys.exit(1)
+
+    # Parse the expected output from the given file
+    try:
+        with open(args[0], "rt") as f:
+            target = parse_results(f)
+    except FileNotFoundError as e:
+        print(e)
+        sys.exit(1)
+
+    # Run the individual tests in the suite
+    tests = split_tests(cfg + target)
+    first = True
+    summary = defaultdict(Counter)
+    for (testname, target) in tests:
+        if first:
+            first = False
+        else:
+            log.info('-' * 60)
+        results = dotest(testname, target, args, opts)
+        for sec in results:
+            summary[sec][results[sec]] += 1
+
+    # In the case of multiple tests print a summary
+    if len(tests) > 1:
+        log.info('')
+        log.info("=" * 60)
+        log.info('')
+        log.info(_("SUMMARY"))
+        for k in sorted(summary):
+            errs = (summary[k][ResultType.ERROR] +
+                    summary[k][ResultType.FATAL])
+            fmt = "%s:  \t%d %s,\t%d %s,\t %d %s"
+            a = [k]
+            a += [summary[k][ResultType.SUCCESS], _("successes")]
+            a += [summary[k][ResultType.WARNING], _("warnings")]
+            a += [errs, _("errors")]
+            log.info(fmt % tuple(a))
+        log.info('')
+
+if __name__ == '__main__':
+    main()

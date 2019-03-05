@@ -1,0 +1,65 @@
+#!./pvcheck
+
+#######################################################################
+# EXAMPLE WITH MULTIPLE TEST CASES
+#######################################################################
+
+# Each test is introduced by the special section [.TEST].  Usually,
+# each test has different inputs and outputs.  Outputs are defined by
+# ordinary sections.  The input can be specified:
+#
+# - with the special section [.INPUT] that allows to specify text to
+#   be sent to the program via its standard input;
+#
+# - with the special section [.ARGS] that allow to specify additional
+#   arguments to be passed with the command line (one extra argument
+#   per line).
+
+# Common parts among all the test cases (for instance options in the
+# [.SECTIONS] special section) can be specified before the first
+# [.TEST] section.  They will be prepended to all the tests.
+
+# In this example the program is supposed to read an integer from the
+# standard input, anf to write its factorial.
+
+############################################################
+
+[.TEST]
+Test 1
+
+[.ARGS]
+esame.dat
+
+[VOCALI]
+3
+5
+10
+11
+12
+15
+[MINMAX-VOCALI]
+3 vocali
+il carattere i da marcare (non I), ihihih
+[INVERSIONE-CARATTERI]
+ilacov 3
+2 `uip ,ilacov 3
+ELOCSUIAM 5 `uip ,ilacov 3
+erettarac ehclauq e elorap 5
+elorap 4 ad itiuges ... irettarac
+hihihi ,)I non( eracram ad i erettarac li
+[PAROLE]
+2
+4
+5
+5
+6
+8
+[MARCATURA]
+. vocali
+. vocali, piu` 2
+. vocali, piu` 5 MAIUSCOLE
+. parole e qualche carattere
+.aratteri ... seguiti da 4 parole
+.l carattere . da marcare (non I), .h.h.h
+
+############################################################

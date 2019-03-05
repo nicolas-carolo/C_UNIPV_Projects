@@ -1,0 +1,66 @@
+[.TEST]
+Primo file
+
+[.ARGS]
+tiri.txt
+
+[MAXCENTRI]
+Tullio Facchinetti
+
+[MINMAX]
+0
+196
+
+[MEDIA]
+115.9 Guido Benetti
+71.0 Davide Caprino
+97.3 Gianluca roveda
+48.3 Tullio Facchinetti
+95.1 Alessandro Tramonte
+129.3 Daniele De Martini
+83.1 Massimo Carvani
+112.9 Mister X
+
+[CLASSIFICA]
+148 Tullio Facchinetti
+114 Davide Caprino
+104 Massimo Carvani
+76 Alessandro Tramonte
+71 Gianluca roveda
+63 Guido Benetti
+56 Mister X
+38 Daniele De Martini
+
+[.TEST]
+Secondo file
+
+[.ARGS]
+tiri1.txt
+
+[MAXCENTRI]
+Gianluca Roveda
+Tullio Facchinetti
+
+[MINMAX]
+0
+10000
+
+[MEDIA]
+150.0 Guido Benetti
+151.0 Davide Caprino
+5.0 Gianluca Roveda
+1.0 Tullio Facchinetti
+13.3 Alessandro Tramonte
+1985.3 Daniele De Martini
+31.0 Massimo Carvani
+30.9 Mister X
+
+[CLASSIFICA]
+225 Gianluca Roveda
+225 Tullio Facchinetti
+210 Alessandro Tramonte
+155 Mister X
+150 Massimo Carvani
+15 Guido Benetti
+1 Daniele De Martini
+0 Davide Caprino

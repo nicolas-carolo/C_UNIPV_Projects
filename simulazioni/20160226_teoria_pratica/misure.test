@@ -1,0 +1,25 @@
+# Suite di test per la prova di laboratorio del 26-2-2016 (Temperature)
+
+############################################################
+
+[.TEST]
+File di dati distribuito all'esame
+
+[.ARGS]
+misure.dat
+
+[SUPERAMENTI]
+2
+
+[MEDIA]
+20.557143
+
+[MIN-MAX]
+2015-03-03 8.100000
+2015-08-15 35.400000
+
+[MESE]
+3
+
+[NUM-CENTRALINE]
+3

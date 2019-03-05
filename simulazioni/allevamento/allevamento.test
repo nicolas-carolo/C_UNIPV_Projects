@@ -1,0 +1,166 @@
+# Suite di test per la prova di laboratorio del 28/1/2016 (Allevamento)
+
+############################################################
+
+[.TEST] 
+Un solo cane (femmina)
+
+[.ARGS]
+.FILE
+
+[.FILE]
+Dora F marrone Oxana Helki
+
+[SESSI]
+0
+1
+
+[COLORE]
+marrone
+
+[DIVERSI]
+0
+
+[PROLIFICI]
+
+############################################################
+
+[.TEST] 
+Due maschi e due femmine
+
+[.ARGS]
+.FILE
+
+[.FILE]
+Aaron M fulvo Unique Biscotto
+Aragon M nero Unique Biscotto
+Nora F fulvo Unique Biscotto
+Jenna F fulvo Unique Biscotto
+
+[SESSI]
+2
+2
+
+[COLORE]
+fulvo
+
+[DIVERSI]
+0
+
+[PROLIFICI]
+
+############################################################
+
+[.TEST] 
+Uno per colore
+
+[.ARGS]
+.FILE
+
+[.FILE]
+Gilda F grigio Paprika Azul
+Helki M marrone Gwen Vasco
+Meda F nero Kimba Nawat
+Ramona F fulvo Paprika Azul
+
+[SESSI]
+1
+3
+
+[COLORE]
+fulvo
+
+[DIVERSI]
+0
+
+[PROLIFICI]
+
+############################################################
+
+[.TEST] 
+Due con colore diverso dai genitori
+
+[.ARGS]
+.FILE
+
+[.FILE]
+Mosca M nero Lana Bunter
+Cream F grigio Duna Attila
+Ferro M nero Cream Mosca
+Nelly F marrone Cream Mosca
+Saura F fulvo Cream Mosca
+Berta F grigio Cream Mosca
+
+[SESSI]
+2
+4
+
+[COLORE]
+grigio
+
+[DIVERSI]
+2
+
+[PROLIFICI]
+
+############################################################
+
+[.TEST]
+Esempio nel testo
+
+[.ARGS]
+.FILE
+
+[.FILE]
+Akemi F marrone Eureka Jester
+Beta F nero Nebraska Ufo
+Didone F grigio Nebraska Ufo
+Ginny F nero Nebraska Ufo
+Honey M fulvo Nebraska Ufo
+Nebraska F nero Eureka Kojak
+Ramona F grigio Nebraska Ufo
+Spank M nero Nebraska Ufo
+Tal M nero Eureka Jester
+Ufo M marrone Eureka Jester
+Viper M marrone Nebraska Ufo
+Yuki F nero Nebraska Ufo
+
+[SESSI]
+5
+7
+
+[COLORE]
+nero
+
+[DIVERSI]
+3
+
+[PROLIFICI]
+Nebraska
+Ufo
+
+############################################################
+
+[.TEST]
+File di dati distribuito all'esame
+
+[.ARGS]
+allevamento.txt
+
+[SESSI]
+61
+59
+
+[COLORE]
+grigio
+
+[DIVERSI]
+25
+
+[PROLIFICI]
+Carol
+Dulcinea
+Funny
+Skah
+Ugo
+Xoros

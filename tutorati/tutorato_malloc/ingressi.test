@@ -1,0 +1,51 @@
+[.TEST]
+Pochi dati
+
+[.ARGS]
+ingressiPiccolo.txt
+
+[INGRESSI]
+6
+
+[INCASSO_MENSILE]
+Aprile 3.50
+Maggio 4.00
+Giugno 4.50
+Luglio 5.50
+Agosto 7.00
+Settembre 7.00
+
+[INCASSO_TOTALE]
+31.50
+
+[MESE_MAX_INGRESSI]
+Aprile
+
+[GIORNO_MAX_INGRESSI]
+1/4/2012
+
+[.TEST]
+Tanti dati
+
+[.ARGS]
+ingressiGrande.txt
+
+[INGRESSI]
+10279
+
+[INCASSO_MENSILE]
+Aprile 5975.00
+Maggio 7496.50
+Giugno 8611.50
+Luglio 14113.50
+Agosto 16417.00
+Settembre 8611.50
+
+[INCASSO_TOTALE]
+61225.00
+
+[MESE_MAX_INGRESSI]
+Agosto
+
+[GIORNO_MAX_INGRESSI]
+25/8/2012

@@ -1,0 +1,36 @@
+# Suite di test per la prova di laboratorio del 22-3-2016 (basket)
+
+############################################################
+
+[.TEST]
+File di dati distribuito all'esame
+
+[.ARGS]
+partite.dat
+
+[PUNTEGGIO-MIGLIORE]
+Rockets
+Warriors
+
+[VITTORIE]
+3
+2
+
+[MEDIA]
+174.0
+
+[SQUADRE]
+Rockets
+Warriors
+Lakers
+Pistons
+Celtics
+Clippers
+
+[PARTITE]
+Celtics 1 0
+Clippers 1 0
+Lakers 1 0
+Pistons 2 2
+Rockets 2 1
+Warriors 3 2

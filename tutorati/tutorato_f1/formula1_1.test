@@ -1,0 +1,28 @@
+[.TEST]
+Una gara
+
+[.ARGS]
+campionato1.txt
+
+[ORDINE_PILOTI]
+Valtteri_Bottas 25
+Carlos_Sainz 18
+Max_Verstappen 15
+Felipe_Nasr 12
+Fernando_Alonso 10
+Daniel_Ricciardo 8
+Daniil_Kvyat 6
+Pastor_Maldonado 4
+Felipe_Massa 2
+Romain_Grosjean 1
+Sebastian_Vettel 0
+Nico_Rosberg 0
+Roberto_Merhi 0
+Marcus_Ericsson 0
+Lewis_Hamilton 0
+Will_Stevens 0
+Sergio_Perez 0
+Nico_Hulkenberg 0
+Kimi_Raikkonen 0
+Jenson_Button 0
+
